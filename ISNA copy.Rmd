@@ -1,0 +1,281 @@
+---
+title: "Industrial Symbiosis Network Analysis"
+author: "Andey Nunes"
+date: "3/11/2017"
+output:
+  pdf_document: default
+  html_document: default
+header-includes:
+- \usepackage{amsfonts}
+- \usepackage{color}
+- \usepackage{amsmath}
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE) 
+packages <- c("igraph", "intergraph", "knitr", "network", "sna", "statnet")  
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}  
+lapply(packages, require, character.only=TRUE)
+options(xtable.comment=FALSE)
+```
+
+# Industrial Symbiosis Network Analysis: Centrality Measures of Resilience
+
+## Introduction: Industrial Symbiosis Networks
+
+Dr. Marian Chertow defines industrial symbiosis as, "engaging traditionally separate industries in a collective approach to competitive advantage involving physical exchanges of materials, energy, water, and by-products"[1]. Individual firms seeking to reduce waste or recover sunk costs in production residuals can collaborate with other firms seeking alternative reduced-cost inputs to form linkages of exchange that create the industrial symbiosis network [2,3]. Eco-industrial parks and industrial symbiosis networks are of keen interest as a form of sustainable economic development where climate change goals, resource efficiency, and job growth are top priorities [1,2,3]. While resource exchange forms the basis of industrial symbiosis networks, no complex economic system can be fully understood without incorporating the social network within which the economic activity is embedded, and this is particularly true for industrial symbiosis networks [3,13].  
+
+This paper explores the Kalundborg industrial symbiosis network in Denmark and uses network analysis findings from Zhang, et al. 2016, [6] and from Chopra & Khanna 2014 [7] to explore network structure and network effects in an attempt to answer the question, what features contribute to the resilience and/or vulnerabitlites of the network. The following section builds the network model and explores centrality measures and structural features. Discussion follows that compares these results to those of Zhang, et al. and Chopra & Khanna.
+
+The Eco-industrial development in Kalundborg began in the 1960's and 1970's as a response to constraints in sources of surface water and wastewater concerns and has evolved through collaborative partnerships between key firms and the Kalundborg Municipality [4]. Branson showed that it was not only geographical proximity and common constraints but also a "short mental distance" between managers participating in the collaborative agreements that established the nature of the inter-dependent development model [4]. Using the social space concepts of Peter Blau, we can say that the managers in the Kalundborg region shared multiple dimensions of socio-demographic similarities (Blau space) in the face of regulatory requirements and development of economic opportunities. It is through this commonality that the organizers created collective value through shared resources while also spreading risk and increasing economic returns [3,4,13,14]. 
+
+## Model development
+
+To begin, the adjacency matrix from Domenech and Davies (2011) is entered and vertices are identified according to firm names to build the directed graph model [3]. Details for firms and the exchanges were culminated from Kalundborg Symbiosis and Branson (2016) [4,5]. 
+
+
+
+```{r Kalnundborg Model, echo=FALSE}
+KalAdj <- rbind(c(0,1,1,1,0,0,1,1,0,0,0), c(1,0,0,0,0,0,1,1,0,0,0), c(1,1,0,1,1,0,1,0,1,1,1), c(1,1,1,0,1,0,0,0,0,0,1), c(0,0,0,0,0,0,0,0,0,0,0), c(0,0,0,0,0,0,0,0,0,0,0), c(0,0,0,0,0,1,0,0,0,0,0), c(0,0,0,0,0,0,0,0,0,0,0), c(0,0,0,0,0,0,0,0,0,0,0), c(0,0,0,0,0,0,0,0,0,0,0), c(0,0,0,0,0,0,0,0,0,0,0))
+
+industries <- c("NovoNordisk", "NovoEnzymes", "DONG_Energy", "Statoil", "Gyproc", "Soilrem", "Municipality", "Farmers", "FishFarm", "AlborgCement", "Kara_Noveren")
+
+rownames(KalAdj) <- industries
+
+colnames(KalAdj) <- industries
+
+# create network graph object for statistical summary and graphs
+KalNet <- network(KalAdj, matrix.type = "adjacency")
+
+# create Igraph object for attribute assignment
+KalNetIgraph <- asIgraph(KalNet)
+
+industryProductFoci <- c("pharmaceuticals", "yeast/enzymes", "electricity", "wallboard", "soil-amendment", "city-utilities", "agriculture", "aquaculture", "concrete", "recycling")
+
+set.vertex.attribute(KalNet, "ProductFoci", industryProductFoci, v = seq_len(network.size(KalNet)))
+
+# saved for further work, how to set multiple types, because some firms exchanged both water and materials (or energy) in different directions. Also, how to assign attributes to specific edge by list or ...?
+#set.edge.attribute(KalNet, "Type", )
+```
+
+The summary included in the Appendix shows the Kalundborg symbiosis network contains eleven organizations with 22 exchanges, resulting in a network density of 0.2. 
+
+The edge list verifies the adjacency matrix connection specification. The degree distribution by vertex is given in the appendix. Also included in the appendix are several other basic measures for this network including components, size of the largest component, and clustering coefficient.
+
+```{r degree distribution, echo=FALSE}
+degKalNet <- degree(KalNet)
+```
+
+Results show that there are eight clusters in total, and the overall network has a high degree of clustering with transitivity of `r gtrans(KalNet)`. However, even with high clustering, the average path length of the network is `r average.path.length(KalNetIgraph)`. Low average path length is associated with high effciency of information sharing on a collaborative network [12].
+
+Next we can visualize the graph using alternative viewing layouts to get a sense of the connections between organizations.
+
+```{r plots, echo=FALSE, fig.height=10, fig.width=15}
+#plot(KalNetIgraph, layout=layout_nicely)
+#plot(KalNet, displaylabels = T, label.pos = 3, mode = "fruchtermanreingold")
+par(mfrow=c(1,2))
+
+gplot(KalNet, mode = "circle", displaylabels = T, label.pos = 3, arrowhead.cex = 0.7, label.cex = 1, main = "Circular layout")
+
+gplot(KalNet, mode = "kamadakawai", displaylabels = T, label.pos = 3, arrowhead.cex = 0.7, label.cex = 1, main = "Kamada-Kawai Layout")
+```
+
+## Measures of Centrality and Actor Prominence
+Centrality measures can offer different perspectives of the importance of actor position and connectivity in the network. Here I define these measures and summarize the indiviudal nodal centrality measures in a table for comparison and then offer a detailed graphical summary of the table measures. 
+
+|Measure of Centrality         |Description                                 |  
+|------------------------------|--------------------------------------------|  
+|**Degree Centrality** $C_D(n_i) = d(n_i)$ |The *degree centrality* indicates which nodes have the highest connections. We can break this out further into in-degree $C_{iD}(n_i) = d^-(n_i)$ and out-degree $C_{oD}(n_i) = d^+(n_i)$ where in-degree indicates a termination and out-degree indicates an origin of network flow. |  
+| | |  
+|**Closeness Centrality** $C_C(n_i) = [ \sum_{j=1}^{g} d(n_i, n_j)]^{-1}$ |Where degree centrality counts the edges connecting a node to its neighbors, *closeness* refers to the inverse of the sum of all distances between $i$ and all other nodes in the network. |  
+| | |  
+|**Betweenness Centrality** $C_B(n_i) = \sum_{j \textless k} g_{jk} (n_i) /g_{jk}$ |*Betweenness* of a vertex indicates the extent to which a vertex lies on the shortest paths between pairs of other vertices [Freeman Borghatti]. High betweenness could identify an important intermediate node. |  
+| | |  
+|**Stress Centrality** <br/> $C_S(n_i) =  \sum_j \sum_k g_{jk}(n_i)$ |This metric gives the absolute number of shortest paths containing a node. Higher values indicate higher stress. |  
+| | |  
+|**Eigenvector Centrality** <br/> $C_E(n_i) = \alpha \sum_{j,k} c_{Ei} (n_j)$ |Where $\alpha$ is the largest eigenvector. |  
+| | |  
+|**Flow Betweenness Centrality** <br/> $C_F(n_i) = \sum( f(i,j,G) - f(i,j,G\backslash n_i), i,j: i!=j, i!=n_i,  j!=n_i)$ |Where $f(i,j,G)$ is the total maximum flow from i to j (aggregated) that is mediate by $n_i$ [__]. |  
+
+Table: **Measures of Centrality: Definitions and Descriptions**
+   
+
+### Centrality Summary Table
+The following table summarizes the individual scores for the following centrality measures: degree, closeness, betweenness, stress, eigenvector, and flow-betweenness.
+
+```{r centrality summary, echo=FALSE}
+# code reference Luke, pp97-99
+options(digits = 4)
+dfKalCent <- data.frame(degree = degree(KalNet), closeness = closeness(KalNet), betweenness = betweenness(KalNet), stress = stresscent(KalNet), eigenvector = evcent(KalNet), flowBetween = flowbet(KalNet) )
+row.names(dfKalCent) <- KalNet %v% "vertex.names"
+KalCentTbl <- dfKalCent[order(-dfKalCent$degree), ]
+
+cd <- centralization(KalNet, degree)
+cc <- centralization(KalNet, closeness)
+cb <- centralization(KalNet, betweenness)
+cs <- centralization(KalNet, stresscent)
+ce <- centralization(KalNet, evcent)
+cf <- centralization(KalNet, flowbet)
+
+KalCentTbl <- rbind(KalCentTbl, c(cd, cc, cb, cs, ce, cf))
+row.names(KalCentTbl)[12] <- "Centralization"
+
+kable(KalCentTbl)
+```
+
+```{r centrality target graphs, warning=FALSE, echo=FALSE, fig.height=8, fig.width=15}
+par(mfrow = c(2,3))
+# degree centrality
+gplot.target(KalNet, degree(KalNet), circ.lab = F, jitter = T, edge.col = "darkgray",  displaylabels = T, label.pos = 3, label.cex = 1.5, main = "degree")
+
+# closeness centrality
+gplot.target(KalNet, closeness(KalNet), circ.lab = F, jitter = T, edge.col = "darkgray",  displaylabels = T, label.pos = 3, label.cex = 1.5, main = "closeness")
+
+# betweenness centrality
+gplot.target(KalNet, betweenness(KalNet), circ.lab = F, jitter = T, edge.col = "darkgray",  displaylabels = T, label.pos = 3, label.cex = 1.5, main = "betweenness")
+
+# stress centrality
+gplot.target(KalNet, stresscent(KalNet), circ.lab = F, jitter = T, edge.col = "darkgray",  displaylabels = T, label.pos = 3, label.cex = 1.5, main = "stress")
+
+# eigenvector centrality
+gplot.target(KalNet, evcent(KalNet), circ.lab = F, jitter = T, edge.col = "darkgray",  displaylabels = T, label.pos = 3, label.cex = 1.5, main = "eigenvector")
+
+# flow betweenness centrality
+gplot.target(KalNet, flowbet(KalNet), circ.lab = F, jitter = T, edge.col = "darkgray",  displaylabels = T, label.pos = 3, label.cex = 1.5, main = "flow-between")
+```
+
+*Degree centrality* shows the power plant, the oil refinery, and the biotech organizations as the most connected in the network, with most firms connected by only one or two linkages occupying the peripheral rings of the graphic. 
+
+*Closeness centrality* shows the same key core firms from the degree centrality graphic occupying the center of the target. There appears to be some interesting closeness measures between a several more peripheral firms, namely between the building materials (gyproc and cement) related firms and the agrarian (fish farm and fertilizer) focused firms.
+
+*Betweenness centrality* is very interesting in that the oil refinery ends up in a more peripheral position than the municipality. This signals that the most important intermediary nodes are the power plant, and the pharmaceutical manufacturer followed by the Kalundborg Municipality. This is an interesting finding, because the Municipality serves as a district heating utility for the surrounding community, and its betweenness centrality places it closer to the power company than the oil refinery is. This also serves as structural evidence of the Municipality's key role as an instituional resource to support flows in the network. 
+
+*Stress centrality* shows the importance of the power plant and the pharmaceutical manufacturer with the Municipality third in importance for presence of shortest paths in the network. *Eigenvector centrality* shows the oil refinery, the power company, and the pharmaceutical company as three-way tie for top importance, while *Flow-betweenness* shows a similar trend as the *stress centrality* measure.   
+
+The centrality measures reveal dimensions of what David Knoke defines as *strategic alliances* which are legally independent partnering organizations that share benefits (here cascading use of constrained resources), and that make continuing contributions in strategic areas. 
+A regional economic development profile generated from 2016 Statistics Denmark showed the location quotient, a measure of the concentration of an industry in a region compared to the nation, for the oil refinery at 67.65 and 19.61 for pharmaceuticals. The Novo group alone, accounted for 81% of the job growth in the region between 2008-2014. The power plant is Denmark's second largest, which speaks to its importance both regionally, and nationally.
+
+### K-cores centrality
+```{r k-core target, echo=FALSE, warning=FALSE}
+cores <- graph.coreness(KalNetIgraph)
+gplot.target(KalAdj, cores, circ.lab = F, circ.col = "skyblue", usearrows = F, vertex.col = cores, edge.col = "darkgray", displaylabels = T, label.pos = 3, label.cex = 0.7 , main = "k-cores")
+
+```
+
+These findings agree with Domenech and Davies in that the core nodes are those that have multiple exchanges and a longer history of interaction and the periphery nodes serve as singular or are simply recipients of exchanges [3]. Results also agree with Zhang, et al. description of "anchor tenant mutualism" which in this case is the power plant with degree ten. Centrality measures from Zhang, et al. and Chopra & Khanna were in agreement with findings in the Centrality Summary.
+
+
+
+
+## Discussion
+One could use Newman's definition of community structure to argue that industrial symbiosis networks are a special community structure within larger global industrial supply networks, meaning these networks are dense subnetworks within a larger economic network [10].  The economic importance of the most central actors in the Kalundborg network are also important in a global sense. Novo Nordisk is currently the world's largest producer of insulin and Novo Enzymes, the world's largest producer of food and medical grade enzymes [5]. More recently, new alliances have created the world's largest algae based bio-ethanol pilot-facility that generates renewable fuels from the existing waste-loops [5]. 
+
+With the creation of Kalundborg Symbiosis, a sustainable industrial economic development innovation institution has emerged from the interest in further developing and potentially recreating the symbiosis networks in other regions. The non-profit institute currently holds offices in Brussels at the EU headquarters and has been recognized as an Innovation Pole or consortia that promotes competitiveness and stimulates innovation [15]. Clearly, there is a global need for this kind of sustainable industrial development.  
+
+
+# References
+
+[1] Chertow, M.R. (2007) "Uncovering" Industrial Symbiosis. *Journal of Industrial Ecology*  11(1): 11-30
+
+[2] Ehrenfeld, J.R., Chertow, M.R. (2002) Industrial Symbiosis: The Legacy of Kalundborg. In *A Handbook of Industrial Ecology* edited by R.U. Ayres and L.W. Ayres. Cheltenham, UK.: Edward Elgar
+
+[3] Domenech, T., Davies, M. (2011) Structure and morphology of industrial symbiosis networks: The case of Kalundborg. *Procedia Social and Behavioral Sciences* 10: 79-89
+
+[4] Branson, R. (2016) Re-constructing Kalundborg: the reality of bilateral symbiosis and other insights. *Journal of Cleaner Production* 112:4322-4352
+
+[5] Kalundborg Symbiosis <www.symbiosis.dk/en/system>
+
+[6] Zhang, Y., Zheng, H., Shi, H., Xiangyi, Y., Gengyuan, L., Meirong, S., Yating, L., Yingying,C. (2016) Network analysis of eight industrial symbiosis systems. *Frontiers fo Earth Science* 10(2): 352 - 365
+
+[7] Chopra, S.S., Khanna, V. (2014) Understanding resilience in industrial symbiosis networks: Insights from network analysis. *Journal of Environmental Management* 141: 86 - 94
+
+[8] Kolaczyk, E.D., Csardi, G. (2014) *Statistical Analysis of Network Data with R* Springer. New York, New York
+
+[9] Luke, D.A. (2015) *A User's Guide to Network Analysis in R* Springer. Cham, Switzerland
+
+[10] Newman, M.E.J (2012) Communities, modules, and large scale structure in networks. *Nature Physics* (8) 25-31
+
+[11] Freeman, L.C.; Borgatti, S.P.; and White, D.R. (1991). Centrality in Valued Graphs: A Measure of Betweenness Based on Network Flow. *Social Networks*, 13(2), 141-154. 
+
+[12] Mason, W., Watts, D. (2015) Collaborative Learning on Networks.*PNAS* 109(3):764-769
+
+[13] Granovetter, M. (2005) The Impact of Social Structure on Economic Outcomes. *Journal of  Economic Perspectives* 19(1): 33-50
+
+[14] Knoke, D. (2012) *Economic Networks* Polity Press, Cambridge, UK.
+
+[15] Taddeo, R., Simboli, A., Ioppolo, G., Morgante, A. (2017) Industrial Symbiosis, Networking and Innovation: The Potential Role of Innovation Poles. *Sustainability* 9, 169. doi: 10.3390/su9020169 <www.mdpi.com/2071-1050/9/2/169/pdf>
+ 
+
+# Appendix: Supporting Tables and Figures
+
+### Network model summaries
+```{r summary figures}
+summary(KalNet)
+str(KalNetIgraph)
+```
+
+### Network Connectivity
+```{r connectivity}
+is.connected(KalNet)
+```
+
+### Degree distribution
+```{r degree dist}
+degKalNet
+```
+
+
+### Components and clustering
+```{r components & transitivity}
+components(KalNet)
+geodist(component.largest(KalNet, connected = "strong", result = "graph"))
+```
+
+### Cliques
+```{r cliques}
+clique.census(KalNet, mode = "digraph", clique.comembership = "bysize")
+```
+
+### K-cores & Centrality
+```{r k-cores}
+kcores(KalNet, mode = "digraph", diag = FALSE, cmode = "freeman", ignore.eval = FALSE)
+kcores(KalNet, mode = "digraph", diag = FALSE, cmode = "indegree", ignore.eval = FALSE)
+kcores(KalNet, mode = "digraph", diag = FALSE, cmode = "outdegree", ignore.eval = FALSE)
+```
+
+### Network Efficiency
+
+```{r Network Efficiency, echo=F}
+# Mean local efficiency (global efficiency for each node)
+gn<-graph.neighborhood(KalNetIgraph,1) 
+# list with subgraphs of directly connected graphs
+
+
+names(gn)<-V(KalNetIgraph)$name
+local.eff<-numeric(length(gn))
+for (i in 1:length(gn)){
+  gn[[i]]<-gn[[i]] - vertex(V(gn[[i]])[match(names(gn[i]),V(gn[[i]])$name)]) #MATCHES
+  eff.gn<-1/(shortest.paths(gn[[i]]))
+  eff.gn[!is.finite(eff.gn)]<-0
+  eff.gn<-mean(eff.gn,na.rm=TRUE)
+  local.eff[i]<-eff.gn
+}
+local.eff[local.eff %in% NaN]<-NA
+mean.local.eff<-mean(local.eff, na.rm=TRUE)
+mean.local.eff
+```
+
+
+
+### Network Dynamics
+Laplacian of the network and its spectral decomposition
+$$L_{ij}=k_iI-A_{ij}$$ where $k_i$ is the degree distribution of the network, $I$ is the identity matrix, and $A_{ij}$ is the adjacency matrix.
+
+```{r Laplacian spectral decomposition, warning=FALSE, echo=FALSE}
+kiI <- diag(degree(KalNet),nrow = 11, ncol = 11)
+Lij <- kiI - KalAdj # Aij = KalAdj
+eigen(Lij)
+```
+
